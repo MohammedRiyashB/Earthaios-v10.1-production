@@ -1,0 +1,6 @@
+{
+  "name": "EARTH AI OS V10.1",
+  "description": "Production-quality AI Operating System. Founder: Mohammed Riyash B.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

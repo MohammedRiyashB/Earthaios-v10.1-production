@@ -1,0 +1,186 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap');
+@import "tailwindcss";
+
+@layer base {
+  :root, [data-theme="Logo"] {
+    --accent-400-base: #00E5FF;
+    --accent-500-base: #00B8D9;
+    --accent-600-base: #008Da6;
+    --accent-900-base: #004554;
+  }
+  [data-theme="Blue"] {
+    --accent-400-base: var(--color-blue-400);
+    --accent-500-base: var(--color-blue-500);
+    --accent-600-base: var(--color-blue-600);
+    --accent-900-base: var(--color-blue-900);
+  }
+  [data-theme="Emerald"] {
+    --accent-400-base: var(--color-emerald-400);
+    --accent-500-base: var(--color-emerald-500);
+    --accent-600-base: var(--color-emerald-600);
+    --accent-900-base: var(--color-emerald-900);
+  }
+  [data-theme="Rose"] {
+    --accent-400-base: var(--color-rose-400);
+    --accent-500-base: var(--color-rose-500);
+    --accent-600-base: var(--color-rose-600);
+    --accent-900-base: var(--color-rose-900);
+  }
+  [data-theme="Amber"] {
+    --accent-400-base: var(--color-amber-400);
+    --accent-500-base: var(--color-amber-500);
+    --accent-600-base: var(--color-amber-600);
+    --accent-900-base: var(--color-amber-900);
+  }
+}
+
+@theme {
+  --color-accent-400: var(--accent-400-base);
+  --color-accent-500: var(--accent-500-base);
+  --color-accent-600: var(--accent-600-base);
+  --color-accent-900: var(--accent-900-base);
+  
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+  
+  --shadow-accent-glow-sm: 0 0 10px color-mix(in srgb, var(--color-accent-500) 80%, transparent);
+  --shadow-accent-glow-md: 0 0 15px color-mix(in srgb, var(--color-accent-500) 30%, transparent);
+  --shadow-accent-glow-lg: 0 0 20px color-mix(in srgb, var(--color-accent-500) 30%, transparent);
+  --shadow-accent-glow-xl: 0 0 30px color-mix(in srgb, var(--color-accent-500) 30%, transparent);
+}
+
+@layer base {
+  html, body, #root {
+    @apply h-[100dvh] w-full overflow-hidden m-0 p-0;
+  }
+  body {
+    @apply bg-black text-white selection:bg-accent-500/30;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
+    text-rendering: optimizeLegibility;
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+  }
+  
+  /* Make app feel like native */
+  #root {
+    overscroll-behavior: none;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: "Space Grotesk", sans-serif;
+  }
+  
+  a, button, input, textarea, select {
+    touch-action: manipulation;
+  }
+  
+  * {
+    /* Smoother scrolling overall */
+    scroll-behavior: smooth;
+  }
+}
+
+@layer utilities {
+  .hardware-accelerated {
+    transform: translateZ(0);
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+  }
+  /* ultra smooth transitions */
+  .transition-ultra {
+    transition-property: all;
+    transition-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
+    transition-duration: 400ms;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Hide scrollbar for clean horizontal scrolls if needed */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+/* Data Saver Mode */
+html.data-saver {
+  --shadow-accent-glow-sm: none;
+  --shadow-accent-glow-md: none;
+  --shadow-accent-glow-lg: none;
+  --shadow-accent-glow-xl: none;
+}
+
+html.data-saver * {
+  animation-duration: 0.001ms !important;
+  transition-duration: 0.001ms !important;
+  backdrop-filter: none !important;
+}
+
+html:not(.dark) body {
+  @apply bg-gray-50 text-gray-900 selection:bg-accent-500/20;
+}
+
+html:not(.dark) .bg-white\/\[0\.05\] {
+  @apply bg-white border-gray-200 shadow-sm;
+}
+html:not(.dark) .border-white\/10 {
+  @apply border-gray-200;
+}
+html:not(.dark) .text-white {
+  @apply text-gray-900;
+}
+html:not(.dark) .text-white\/80, html:not(.dark) .text-white\/90 {
+  @apply text-gray-700;
+}
+html:not(.dark) .text-white\/50, html:not(.dark) .text-white\/60, html:not(.dark) .text-white\/40 {
+  @apply text-gray-500;
+}
+html:not(.dark) .text-white\/20 {
+  @apply text-gray-300;
+}
+html:not(.dark) .bg-white\/5 {
+  @apply bg-gray-100;
+}
+html:not(.dark) .bg-white\/10 {
+  @apply bg-gray-200;
+}
+html:not(.dark) .bg-white\/20 {
+  @apply bg-gray-300;
+}
+html:not(.dark) .bg-black {
+  @apply bg-white;
+}
+html:not(.dark) .bg-black\/20 {
+  @apply bg-gray-50;
+}
+html:not(.dark) .divide-white\/5 > :not([hidden]) ~ :not([hidden]) {
+  @apply border-gray-100;
+}
+html:not(.dark) .border-b\.border-white\/5 {
+  @apply border-gray-100;
+}
+html:not(.dark) .hover\:bg-white\/\[0\.08\]:hover {
+  @apply bg-gray-50;
+}
