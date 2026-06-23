@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Paperclip, Mic, ArrowUp, Wifi, WifiOff, X } from 'lucide-react';
+import { Paperclip, Mic, ArrowUp, Wifi, WifiOff, X, Square, Globe, Plus, AudioLines } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../../lib/utils';
@@ -8,65 +8,234 @@ import { memoryApi } from '../../services/memory';
 import { useHaptics } from '../../hooks/useHaptics';
 
 export function ChatInput() {
-  const { updateSession, addMessage, updateMessage, messages, setMessages, conversationId, setIsStreaming, isStreaming, isVoiceMode, setIsVoiceMode, connectionStatus, setConnectionStatus, settings } = useApp();
+  const { updateSession, addMessage, updateMessage, messages, setMessages, conversationId, setIsStreaming, isStreaming, isVoiceMode, setIsVoiceMode, connectionStatus, setConnectionStatus, settings, currentModel, isIncognito, setIsTyping } = useApp();
   const haptic = useHaptics();
   const [input, setInput] = useState('');
   const [attachment, setAttachment] = useState<File | null>(null);
+  const [useWebSearch, setUseWebSearch] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const requestRef = useRef<number>();
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [interimResult, setInterimResult] = useState('');
+  
+  useEffect(() => {
+    setIsTyping(input.trim().length > 0 || interimResult.trim().length > 0);
+  }, [input, interimResult, setIsTyping]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  const recognitionRef = useRef<any>(null);
+  const userInitiatedFocus = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const isStreamingRef = useRef(isStreaming);
 
   useEffect(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = true;
-      recognition.lang = 'en-US';
+    isStreamingRef.current = isStreaming;
+  }, [isStreaming]);
 
-      recognition.onstart = () => {
-        setIsVoiceMode(true);
-        setInterimResult('');
-      };
-
-      recognition.onresult = (event: any) => {
-        let finalTranscript = '';
-        let interim = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          } else {
-            interim += event.results[i][0].transcript;
-          }
-        }
-        
-        setInterimResult(interim);
-        
-        if (finalTranscript) {
-          setInput(prev => prev + (prev ? ' ' : '') + finalTranscript);
-        }
-      };
-
-      recognition.onerror = (event: any) => {
-        console.error('Speech recognition error', event.error);
-        setIsVoiceMode(false);
-        setInterimResult('');
-        if (event.error === 'not-allowed') {
-          alert('Microphone access denied. Please allow microphone access in your browser to use voice input.');
-        }
-      };
-
-      recognition.onend = () => {
-        setIsVoiceMode(false);
-        setInterimResult('');
-      };
-
-      recognitionRef.current = recognition;
+  const stopStreaming = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsStreaming(false);
+      setConnectionStatus('Connected');
+      haptic(10);
     }
-  }, [setIsVoiceMode]);
+  };
+
+  const drawWaveform = () => {
+    if (!canvasRef.current || !analyserRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const analyser = analyserRef.current;
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+    analyser.getByteFrequencyData(dataArray);
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const barWidth = 4;
+    const gap = 3;
+    const totalBars = Math.floor(canvas.width / (barWidth + gap));
+    const step = Math.floor(bufferLength / totalBars);
+
+    for (let i = 0; i < totalBars; i++) {
+      let sum = 0;
+      for (let j = 0; j < step; j++) {
+        sum += dataArray[i * step + j] || 0;
+      }
+      const average = sum / step;
+      
+      // Map average (0-255) to bar height
+      const rawHeight = (average / 255) * canvas.height;
+      const barHeight = Math.max(4, rawHeight * 1.5); // Minimum height of 4px
+
+      const x = i * (barWidth + gap);
+      const y = (canvas.height - barHeight) / 2; // Center vertically
+
+      ctx.fillStyle = '#ffffff'; // White color as requested
+      ctx.beginPath();
+      ctx.roundRect(x, y, barWidth, barHeight, 2);
+      ctx.fill();
+    }
+
+    requestRef.current = requestAnimationFrame(drawWaveform);
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioContextRef.current = audioContext;
+      
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyserRef.current = analyser;
+      
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+      
+      setIsRecording(true);
+      haptic(15);
+      
+      // Start drawing
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+      requestRef.current = requestAnimationFrame(drawWaveform);
+
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+      
+      mediaRecorder.start();
+
+    } catch (err: any) {
+      console.error("Microphone access denied:", err);
+      // We don't want to alert object if it is an object
+      const errMsg = err.message || "Permission denied";
+      alert(`Microphone access denied: ${errMsg}. Please check your browser permissions.`);
+      setIsRecording(false);
+      stopAudioTracks();
+    }
+  };
+
+  const stopAudioTracks = () => {
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+    }
+    if (requestRef.current) {
+      cancelAnimationFrame(requestRef.current);
+    }
+    setInterimResult('');
+  };
+
+  const cancelRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    stopAudioTracks();
+    setIsRecording(false);
+    haptic(10);
+  };
+
+  const stopRecordingKeepText = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        stopAudioTracks();
+        setIsRecording(false);
+        setIsStreaming(true); // Temporary visual feedback
+        
+        try {
+          const reader = new FileReader();
+          reader.readAsDataURL(audioBlob);
+          reader.onloadend = async () => {
+            const base64data = (reader.result as string).split(',')[1];
+            const response = await fetch('/api/stt', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ audioData: base64data, mimeType: 'audio/webm' })
+            });
+            const data = await response.json();
+            if (data.text) {
+              setInput(prev => prev + (prev && !prev.endsWith(' ') ? ' ' : '') + data.text);
+            }
+            setIsStreaming(false);
+          };
+        } catch (err) {
+          console.error("STT Error", err);
+          setIsStreaming(false);
+        }
+      };
+      mediaRecorderRef.current.stop();
+      haptic(10);
+    } else {
+      stopAudioTracks();
+      setIsRecording(false);
+      haptic(10);
+    }
+  };
+
+  const sendRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        stopAudioTracks();
+        setIsRecording(false);
+        setIsStreaming(true); // show thinking indicator while transcribing
+        
+        try {
+          // Convert blob to base64
+          const reader = new FileReader();
+          reader.readAsDataURL(audioBlob);
+          reader.onloadend = async () => {
+            const base64data = (reader.result as string).split(',')[1];
+            const response = await fetch('/api/stt', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ audioData: base64data, mimeType: 'audio/webm' })
+            });
+            const data = await response.json();
+            const textToSend = input + (data.text ? (input ? ' ' : '') + data.text : '');
+            setIsStreaming(false);
+            if (textToSend.trim()) {
+              handleSend(textToSend);
+            }
+          };
+        } catch (err) {
+          console.error("STT Error", err);
+          setIsStreaming(false);
+        }
+      };
+      mediaRecorderRef.current.stop();
+    } else {
+      setIsRecording(false);
+      stopAudioTracks();
+      handleSend(input);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      stopAudioTracks();
+    };
+  }, []);
 
   const toggleVoiceMode = () => {
     if (!settings.voiceEnabled) {
@@ -74,23 +243,8 @@ export function ChatInput() {
       haptic([10, 50, 10]);
       return;
     }
-    
-    if (!recognitionRef.current) {
-      alert("Voice input is not supported in your browser.");
-      haptic([10, 50, 10]);
-      return;
-    }
-
     haptic(10);
-    if (isVoiceMode) {
-      recognitionRef.current.stop();
-    } else {
-      try {
-        recognitionRef.current.start();
-      } catch (e) {
-        console.error(e);
-      }
-    }
+    setIsVoiceMode(true);
   };
 
   useEffect(() => {
@@ -118,6 +272,8 @@ export function ChatInput() {
           const responseId = failedId;
           updateMessage(responseId, '', { isError: false, isStreaming: true });
 
+          abortControllerRef.current = new AbortController();
+
           try {
             const apiMessages: { role: 'user' | 'assistant' | 'system', content: string }[] = messages.slice(0, failedIndex).map(m => ({
               role: m.role,
@@ -131,8 +287,8 @@ export function ChatInput() {
                 content: 'The user is on a very slow internet connection or data saver is on. Provide a highly concise, minimal bandwidth response.'
               });
             }
-
-            const stream = earthApi.streamMessage(apiMessages);
+            
+            const stream = earthApi.streamMessage(apiMessages, currentModel, abortControllerRef.current.signal, useWebSearch);
             let fullResponse = '';
             
             for await (const chunk of stream) {
@@ -144,18 +300,27 @@ export function ChatInput() {
             updateMessage(responseId, fullResponse, { isStreaming: false });
             setConnectionStatus('Connected');
       
-            memoryApi.saveMessage({
-              id: responseId,
-              conversationId,
-              role: 'assistant',
-              content: fullResponse,
-              timestamp: new Date()
-            });
+            if (!isIncognito) {
+              memoryApi.saveMessage({
+                id: responseId,
+                conversationId,
+                role: 'assistant',
+                content: fullResponse,
+                timestamp: new Date()
+              });
+            }
           } catch (err: any) {
+             if (err.name === 'AbortError') {
+               updateMessage(responseId, (prev) => prev + '', { isStreaming: false });
+               setConnectionStatus('Connected');
+               return;
+             }
              updateMessage(responseId, `EARTH AI temporarily unavailable. ${err.message}`, { isStreaming: false, isError: true });
              setConnectionStatus('Offline');
           } finally {
-             setIsStreaming(false);
+             if (!abortControllerRef.current?.signal.aborted) {
+               setIsStreaming(false);
+             }
           }
         };
         runRetry();
@@ -165,15 +330,21 @@ export function ChatInput() {
     // Add custom event listener for sending auto-replies/suggestions
     const handleRemoteSend = (e: any) => {
       const text = e.detail?.text;
-      if (text && !isStreaming) {
+      if (text) {
+         if (isStreaming && abortControllerRef.current) {
+            // Abort current stream if any
+            abortControllerRef.current.abort();
+         }
          setInput(text);
          // Small timeout to allow state to update before sending
          setTimeout(() => {
             const finalInput = text;
-            if (messages.length === 0) {
-              updateSession(conversationId, { title: finalInput.substring(0, 50), updatedAt: Date.now() });
-            } else {
-              updateSession(conversationId, { updatedAt: Date.now() });
+            if (!isIncognito) {
+              if (messages.length === 0) {
+                updateSession(conversationId, { title: finalInput.substring(0, 50), updatedAt: Date.now() });
+              } else {
+                updateSession(conversationId, { updatedAt: Date.now() });
+              }
             }
             
             const userMsg = {
@@ -184,10 +355,12 @@ export function ChatInput() {
             };
 
             addMessage(userMsg);
-            memoryApi.saveMessage({
-              ...userMsg,
-              conversationId
-            });
+            if (!isIncognito) {
+              memoryApi.saveMessage({
+                ...userMsg,
+                conversationId
+              });
+            }
             
             setInput('');
             setInterimResult('');
@@ -204,6 +377,7 @@ export function ChatInput() {
             });
 
             const callApi = async () => {
+              abortControllerRef.current = new AbortController();
               try {
                 const apiMessages: { role: 'user' | 'assistant' | 'system', content: string }[] = [...messages, userMsg].map(m => ({
                   role: m.role,
@@ -218,7 +392,7 @@ export function ChatInput() {
                   });
                 }
 
-                const stream = earthApi.streamMessage(apiMessages);
+                const stream = earthApi.streamMessage(apiMessages, currentModel, abortControllerRef.current.signal, useWebSearch);
                 let fullResponse = '';
                 
                 for await (const chunk of stream) {
@@ -230,19 +404,28 @@ export function ChatInput() {
                 updateMessage(responseId, fullResponse, { isStreaming: false });
                 setConnectionStatus('Connected');
           
-                memoryApi.saveMessage({
-                  id: responseId,
-                  conversationId,
-                  role: 'assistant',
-                  content: fullResponse,
-                  timestamp: new Date()
-                });
+                if (!isIncognito) {
+                  memoryApi.saveMessage({
+                    id: responseId,
+                    conversationId,
+                    role: 'assistant',
+                    content: fullResponse,
+                    timestamp: new Date()
+                  });
+                }
           
               } catch (err: any) {
+                if (err.name === 'AbortError') {
+                  updateMessage(responseId, (prev) => prev + '', { isStreaming: false });
+                  setConnectionStatus('Connected');
+                  return;
+                }
                 updateMessage(responseId, `EARTH AI temporarily unavailable. ${err.message}`, { isStreaming: false, isError: true });
                 setConnectionStatus('Offline');
               } finally {
-                setIsStreaming(false);
+                if (!abortControllerRef.current?.signal.aborted) {
+                  setIsStreaming(false);
+                }
               }
             };
             
@@ -263,6 +446,7 @@ export function ChatInput() {
           setInput(content);
           // Focus input
           setTimeout(() => {
+            if (!userInitiatedFocus.current) return;
             textareaRef.current?.focus();
           }, 0);
         }
@@ -296,14 +480,28 @@ export function ChatInput() {
     }
   };
 
-  const handleSend = async () => {
-    let finalInput = input + (interimResult ? (input ? ' ' : '') + interimResult : '');
-    
+  const handleSend = async (overrideInput?: string) => {
+    let finalInput = overrideInput !== undefined ? overrideInput : input + (interimResult ? (input ? ' ' : '') + interimResult : '');
+    let fileContent = '';
+
     if (attachment) {
-      finalInput = `[Attached file: ${attachment.name}]\n` + finalInput;
+      // Basic text extraction for text files
+      if (attachment.type.startsWith('text/') || attachment.type === 'application/json' || attachment.name.endsWith('.csv') || attachment.name.endsWith('.md')) {
+        try {
+          const text = await attachment.text();
+          fileContent = `\n\n--- [Attached File: ${attachment.name}] ---\n${text.substring(0, 15000)}\n--- [End of File] ---\n\n`;
+        } catch (err) {
+          console.error("Failed to read file", err);
+        }
+      } else {
+        fileContent = `\n[User attached a file: ${attachment.name}]\n`;
+      }
     }
 
-    if (!finalInput.trim() || isStreaming) return;
+    if (!finalInput.trim() && !fileContent && !attachment) return;
+    if (isStreaming) return;
+    
+    finalInput = finalInput + fileContent;
     
     if (connectionStatus === 'Offline') {
       alert("You are currently offline. EARTH OS cannot transmit to the satellite network.");
@@ -313,24 +511,33 @@ export function ChatInput() {
     
     haptic(15);
     
-    if (messages.length === 0) {
-      updateSession(conversationId, { title: finalInput.substring(0, 50) + (finalInput.length > 50 ? '...' : ''), updatedAt: Date.now() });
-    } else {
-      updateSession(conversationId, { updatedAt: Date.now() });
+    if (!isIncognito) {
+      if (messages.length <= 1) {
+        updateSession(conversationId, { title: finalInput.substring(0, 50).replace(/\[.*?\]\s*/g, '') + (finalInput.length > 50 ? '...' : ''), updatedAt: Date.now() });
+      } else {
+        updateSession(conversationId, { updatedAt: Date.now() });
+      }
+    }
+
+    if (useWebSearch) {
+       finalInput = `[SYSTEM NOTE: The user requested LIVE WEB SEARCH. Please prioritize current facts and use tools to search the live web if applicable.]\n` + finalInput;
     }
 
     const userMsg = {
       id: Date.now().toString(),
       role: 'user' as const,
-      content: finalInput.trim(),
-      timestamp: new Date()
+      content: finalInput.trim() || `[Sent attached file: ${attachment?.name}]`,
+      timestamp: new Date(),
+      attachments: attachment ? [attachment.name] : []
     };
 
     addMessage(userMsg);
-    memoryApi.saveMessage({
-      ...userMsg,
-      conversationId
-    });
+    if (!isIncognito) {
+      memoryApi.saveMessage({
+        ...userMsg,
+        conversationId
+      });
+    }
     
     setInput('');
     setAttachment(null);
@@ -348,6 +555,7 @@ export function ChatInput() {
     });
 
     try {
+      abortControllerRef.current = new AbortController();
       const apiMessages: { role: 'user' | 'assistant' | 'system', content: string }[] = [...messages, userMsg].map(m => ({
         role: m.role,
         content: m.content
@@ -361,7 +569,7 @@ export function ChatInput() {
         });
       }
 
-      const stream = earthApi.streamMessage(apiMessages);
+      const stream = earthApi.streamMessage(apiMessages, currentModel, abortControllerRef.current.signal, useWebSearch);
       let fullResponse = '';
       
       for await (const chunk of stream) {
@@ -373,15 +581,22 @@ export function ChatInput() {
       updateMessage(responseId, fullResponse, { isStreaming: false });
       setConnectionStatus('Connected');
 
-      memoryApi.saveMessage({
-        id: responseId,
-        conversationId,
-        role: 'assistant',
-        content: fullResponse,
-        timestamp: new Date()
-      });
+      if (!isIncognito) {
+        memoryApi.saveMessage({
+          id: responseId,
+          conversationId,
+          role: 'assistant',
+          content: fullResponse,
+          timestamp: new Date()
+        });
+      }
 
     } catch (e: any) {
+      if (e.name === 'AbortError') {
+        updateMessage(responseId, (prev) => prev + '', { isStreaming: false });
+        setConnectionStatus('Connected');
+        return;
+      }
       updateMessage(responseId, `EARTH AI temporarily unavailable. ${e.message}`, { isStreaming: false, isError: true });
       setConnectionStatus('Offline');
     } finally {
@@ -430,89 +645,148 @@ export function ChatInput() {
         transition={{ type: "spring", damping: 25, stiffness: 350 }}
         className={cn(
           "relative flex items-center gap-2 px-2 py-1.5 w-full max-w-[95%] md:max-w-[700px] hardware-accelerated",
-          "bg-[#181818]/92 border border-white/5 backdrop-blur-[30px] rounded-[32px] min-h-[56px]",
+          "bg-[#18181A] border-transparent dark:bg-[#18181A]/80 backdrop-blur-[25px] dark:backdrop-blur-[30px] rounded-[32px] min-h-[56px] shadow-sm",
           "transition-ultra"
         )}
       >
-        <button 
-          onClick={() => {
-            haptic(10);
-            fileInputRef.current?.click();
-          }}
-          className="p-3 text-[#9CA3AF] hover:text-white transition-colors shrink-0 rounded-full hover:bg-white/5 active:scale-95 flex items-center justify-center"
-        >
-          <Paperclip size={20} className="stroke-[1.5]" />
-        </button>
+        {!isRecording && (
+          <button 
+            onClick={() => {
+              haptic(10);
+              fileInputRef.current?.click();
+            }}
+            className="p-3 text-white transition-colors shrink-0 rounded-full hover:bg-white/10 active:scale-95 flex items-center justify-center ml-1"
+          >
+            <Plus size={24} className="stroke-[1.5]" />
+          </button>
+        )}
 
         <div className="flex-1 flex flex-col justify-center min-h-[40px] overflow-hidden">
-          {attachment && (
-            <div className="flex items-center gap-2 bg-white/10 inline-flex w-fit px-2 py-1 rounded-full mb-1 mt-1 shadow-sm border border-white/5">
-              <Paperclip size={12} className="text-white/60" />
-              <span className="text-xs text-white/80 max-w-[150px] truncate">{attachment.name}</span>
-              <button 
-                onClick={() => setAttachment(null)}
-                className="text-white/40 hover:text-white/80 p-0.5 rounded-full hover:bg-white/10 transition-colors"
-                title="Remove attachment"
+          {isRecording ? (
+            <div className="flex items-center w-full h-[40px] px-2">
+              <button
+                onClick={cancelRecording}
+                className="text-white/60 hover:text-white p-2 rounded-full mr-2 transition-colors active:scale-95"
               >
-                <X size={14} />
+                <X size={20} />
               </button>
+              <div className="flex-1 flex items-center justify-center">
+                <canvas
+                  ref={canvasRef}
+                  className="h-[30px] w-full max-w-[200px]"
+                  width={200}
+                  height={30}
+                />
+              </div>
             </div>
+          ) : (
+            <>
+              {attachment && (
+                <div className="flex items-center gap-2 bg-black/5 dark:bg-white/10 inline-flex w-fit px-2 py-1 rounded-full mb-1 mt-1 shadow-sm border border-black/5 dark:border-white/5">
+                  <Paperclip size={12} className="text-gray-500 dark:text-white/60" />
+                  <span className="text-xs text-gray-700 dark:text-white/80 max-w-[150px] truncate">{attachment.name}</span>
+                  <button 
+                    onClick={() => setAttachment(null)}
+                    className="text-gray-500 hover:text-black dark:text-white/40 dark:hover:text-white/80 p-0.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
+                    title="Remove attachment"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              )}
+              <textarea
+                ref={textareaRef}
+                onPointerDown={() => { userInitiatedFocus.current = true; }}
+                onFocus={() => { userInitiatedFocus.current = true; }}
+                onBlur={() => { userInitiatedFocus.current = false; }}
+                value={input + (interimResult ? (input ? ' ' : '') + interimResult : '')}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder={isIncognito ? "Temporary chat" : "Message..."}
+                className="w-full bg-transparent text-white placeholder-gray-500 resize-none outline-none py-2 max-h-[150px] font-medium text-[16px] leading-relaxed transition-ultra hardware-accelerated flex items-center px-2"
+                rows={1}
+                disabled={isStreaming}
+              />
+            </>
           )}
-          <textarea
-            ref={textareaRef}
-            value={input + (interimResult ? (input ? ' ' : '') + interimResult : '')}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            placeholder="Message EARTHAI..."
-            className="w-full bg-transparent text-white placeholder-[#9CA3AF] resize-none outline-none py-2 max-h-[150px] font-medium text-[16px] leading-relaxed transition-ultra hardware-accelerated flex items-center"
-            rows={1}
-            disabled={isStreaming}
-          />
         </div>
 
-        <div className="flex items-center shrink-0 pr-1">
+        <div className="flex items-center shrink-0 pr-1 gap-1">
           <AnimatePresence mode="popLayout">
-            {isStreaming ? (
-              <motion.div 
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0, opacity: 0 }}
-                className="w-12 h-12 flex items-center justify-center shrink-0"
-              >
-                <div className="flex gap-1 items-center justify-center">
-                  <span className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                  <span className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                  <span className="w-1.5 h-1.5 bg-white/50 rounded-full animate-bounce" />
-                </div>
-              </motion.div>
-            ) : !(input.trim() || interimResult.trim()) ? (
+            {isRecording ? (
+              <div className="flex items-center gap-2 mr-1">
+                <motion.button
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0, opacity: 0 }}
+                  onClick={stopRecordingKeepText}
+                  className="w-10 h-10 bg-white/10 text-white hover:bg-white/20 transition-all rounded-full hover:scale-105 active:scale-95 flex items-center justify-center shrink-0"
+                >
+                  <Square size={16} fill="currentColor" strokeWidth={0} />
+                </motion.button>
+                <motion.button
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0, opacity: 0 }}
+                  onClick={sendRecording}
+                  className="w-10 h-10 bg-white text-black hover:bg-gray-200 transition-all rounded-full hover:scale-105 active:scale-95 flex items-center justify-center shrink-0"
+                >
+                  <ArrowUp size={20} strokeWidth={2.5} />
+                </motion.button>
+              </div>
+            ) : isStreaming ? (
               <motion.button 
                 initial={{ scale: 0, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0, opacity: 0 }}
-                onClick={toggleVoiceMode}
-                className={cn(
-                  "w-12 h-12 rounded-full transition-all active:scale-95 flex items-center justify-center shrink-0 relative",
-                  isVoiceMode ? "text-accent-400 bg-white/5" : "text-[#9CA3AF] hover:text-white hover:bg-white/5"
-                )}
+                onClick={stopStreaming}
+                className="w-10 h-10 bg-gray-900 text-white dark:bg-white dark:text-black hover:bg-black dark:hover:bg-gray-200 transition-all rounded-full hover:scale-105 active:scale-95 flex items-center justify-center shrink-0 mr-1"
+                title="Stop App"
               >
-                {isVoiceMode && (
-                  <span className="absolute inset-0 rounded-full bg-accent-500/20 animate-ping opacity-75"></span>
-                )}
-                <Mic size={22} className="relative z-10 stroke-[2]" />
+                <Square size={16} fill="currentColor" strokeWidth={0} />
               </motion.button>
+            ) : !(input.trim() || interimResult.trim()) ? (
+              <div className="flex items-center">
+                <motion.button 
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0, opacity: 0 }}
+                  onClick={startRecording}
+                  className={cn(
+                    "w-10 h-10 rounded-full transition-all active:scale-95 flex items-center justify-center shrink-0 relative mr-1 text-white hover:bg-white/10"
+                  )}
+                >
+                  <Mic size={22} className="relative z-10 stroke-[1.5]" />
+                </motion.button>
+                <div className="w-[1px] h-5 bg-white/10 mx-0.5"></div>
+                <motion.button 
+                  initial={{ scale: 0, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0, opacity: 0 }}
+                  onClick={toggleVoiceMode}
+                  className={cn(
+                    "w-10 h-10 rounded-full transition-all active:scale-95 flex items-center justify-center shrink-0 relative ml-1 mr-1",
+                    isVoiceMode ? "bg-[#1E88E5]/80 text-white" : "bg-[#1E88E5] text-white hover:bg-[#1E88E5]/90"
+                  )}
+                >
+                  {isVoiceMode && (
+                    <span className="absolute inset-0 rounded-full bg-[#1E88E5]/20 animate-ping opacity-75"></span>
+                  )}
+                  <AudioLines size={20} className="relative z-10 stroke-[2]" />
+                </motion.button>
+              </div>
             ) : (
               <motion.button 
                 initial={{ scale: 0, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0, opacity: 0 }}
                 onClick={handleSend}
-                className="w-10 h-10 bg-white text-black hover:bg-gray-200 transition-all rounded-full hover:scale-105 active:scale-95 flex items-center justify-center shrink-0 mr-1"
+                className="w-10 h-10 bg-gray-900 text-white dark:bg-white dark:text-black hover:bg-black dark:hover:bg-gray-200 transition-all rounded-full hover:scale-105 active:scale-95 flex items-center justify-center shrink-0 mr-1"
               >
                 <ArrowUp size={20} strokeWidth={2.5} />
               </motion.button>
@@ -520,13 +794,13 @@ export function ChatInput() {
           </AnimatePresence>
         </div>
       </motion.div>
-      <div className="text-center mt-2 pb-1 opacity-50 scale-90 w-full">
-        <span className="text-[10px] text-[#555] tracking-wide font-medium px-2 block truncate">
-          <a href="https://www.instagram.com/bmrinternational.inc?igsh=cW5tN2liZnNuNnFk" target="_blank" rel="noopener noreferrer" className="hover:text-white/60 transition-colors">BMR.inc</a>
+      <div className="text-center mt-2 pb-1 opacity-80 w-full">
+        <span className="text-[11px] text-gray-500 dark:text-[#777] tracking-wide font-medium px-2 block truncate">
+          <a href="https://www.instagram.com/bmrinternational.inc?igsh=cW5tN2liZnNuNnFk" target="_blank" rel="noopener noreferrer" className="hover:text-gray-900 dark:hover:text-white/60 transition-colors">BMR.inc</a>
           {' • '}
-          <a href="https://www.instagram.com/earthai.space?igsh=bDV3Y2JtNHMydXpm" target="_blank" rel="noopener noreferrer" className="hover:text-white/60 transition-colors">Earthai</a>
+          <a href="https://www.instagram.com/earthai.space?igsh=bDV3Y2JtNHMydXpm" target="_blank" rel="noopener noreferrer" className="hover:text-gray-900 dark:hover:text-white/60 transition-colors">Earthai</a>
           {' • '}
-          <a href="https://www.instagram.com/__rexzz_?igsh=dmZ0MWR5NGt2azBn" target="_blank" rel="noopener noreferrer" className="hover:text-white/60 transition-colors">2026</a>
+          <a href="https://www.instagram.com/__rexzz_?igsh=dmZ0MWR5NGt2azBn" target="_blank" rel="noopener noreferrer" className="hover:text-gray-900 dark:hover:text-white/60 transition-colors">2026</a>
         </span>
       </div>
     </div>

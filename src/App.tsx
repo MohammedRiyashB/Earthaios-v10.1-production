@@ -9,11 +9,14 @@ import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
 import { ChatView } from './components/chat/ChatView';
 import { SettingsPage } from './pages/SettingsPage';
+import { ProjectPage } from './pages/ProjectPage';
+import { MemoryPage } from './pages/MemoryPage';
 import { PlaceholderPage } from './pages/PlaceholderPage';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Shield } from 'lucide-react';
 import { GlobalSearch } from './components/ui/GlobalSearch';
 import { NotificationOverlay } from './components/ui/NotificationOverlay';
+import { VoiceModeOverlay } from './components/chat/VoiceModeOverlay';
 import { useGyroscope } from './hooks/useGyroscope';
 
 function MainArea() {
@@ -24,6 +27,8 @@ function MainArea() {
     switch (activeView) {
       case 'chat': return <ChatView />;
       case 'settings': return <SettingsPage />;
+      case 'projects': return <ProjectPage />;
+      case 'memory': return <MemoryPage />;
       default: return <PlaceholderPage />;
     }
   };
@@ -74,7 +79,7 @@ function BiometricScreen({ onUnlock }: { onUnlock: () => void }) {
 }
 
 function AppWithSettings() {
-  const { settings } = useApp();
+  const { settings, isVoiceMode } = useApp();
   const [isUnlocked, setIsUnlocked] = useState(!settings.biometric);
   
   const textSizeClass = 
@@ -94,6 +99,9 @@ function AppWithSettings() {
       <MainArea />
       <GlobalSearch />
       <NotificationOverlay />
+      <AnimatePresence>
+        {isVoiceMode && <VoiceModeOverlay />}
+      </AnimatePresence>
     </div>
   );
 }

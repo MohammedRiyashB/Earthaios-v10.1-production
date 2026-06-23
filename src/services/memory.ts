@@ -59,8 +59,6 @@ export interface StoredMessage {
 
 export const memoryApi = {
   saveMessage: async (msg: StoredMessage) => {
-    const pathForWrite = `conversations/${msg.conversationId}/messages/${msg.id}`;
-    
     // Save to IDB first for immediate offline availability
     try {
       await idbChats.saveMessage(msg);
@@ -68,8 +66,10 @@ export const memoryApi = {
       console.warn("Could not save to IDB:", err);
     }
 
+    if (!auth.currentUser || auth.currentUser.isAnonymous) return;
+
     try {
-      const msgRef = doc(db, 'conversations', msg.conversationId, 'messages', msg.id);
+      const msgRef = doc(db, 'users', auth.currentUser.uid, 'conversations', msg.conversationId, 'messages', msg.id);
       await setDoc(msgRef, {
         role: msg.role,
         content: msg.content,
@@ -79,20 +79,23 @@ export const memoryApi = {
       });
     } catch (error) {
       console.error('Failed to save message to Firebase', error);
-      // We don't throw here if we successfully saved to IDB and network failed, 
-      // but let's let handleFirestoreError do its thing for genuine auth errors.
-      // For network interruptions, Firestore handles offline queuing if configured, 
-      // but otherwise our IDB layer has it backing up.
       console.warn('Network issue or permissions error. IndexedDB has the message backed up.');
     }
   },
 
   loadConversation: async (conversationId: string): Promise<StoredMessage[]> => {
-    const pathForGetDocs = `conversations/${conversationId}/messages`;
-    
+    if (!auth.currentUser || auth.currentUser.isAnonymous) {
+      try {
+        const localMsgs = await idbChats.getConversation(conversationId);
+        return localMsgs || [];
+      } catch (err) {
+        return [];
+      }
+    }
+
     try {
       const q = query(
-        collection(db, 'conversations', conversationId, 'messages'),
+        collection(db, 'users', auth.currentUser.uid, 'conversations', conversationId, 'messages'),
         orderBy('timestamp', 'asc')
       );
       const querySnapshot = await getDocs(q);
@@ -123,32 +126,70 @@ export const memoryApi = {
       } catch (err) {
         console.error('Failed to load from IDB', err);
       }
-      
-      if (error instanceof Error && (error.message.includes('unavailable') || error.message.includes('offline'))) {
-        console.warn('Network unavailable, returning empty conversation list.');
-        return [];
-      }
-      
-      handleFirestoreError(error, OperationType.LIST, pathForGetDocs);
       return [];
     }
   },
 
   deleteMessage: async (conversationId: string, messageId: string) => {
-    const pathForDelete = `conversations/${conversationId}/messages/${messageId}`;
-    
     try {
       await idbChats.deleteMessage(messageId);
     } catch (err) {
       console.warn("Could not delete from IDB:", err);
     }
     
+    if (!auth.currentUser || auth.currentUser.isAnonymous) return;
+
     try {
-      const msgRef = doc(db, 'conversations', conversationId, 'messages', messageId);
+      const msgRef = doc(db, 'users', auth.currentUser.uid, 'conversations', conversationId, 'messages', messageId);
       await deleteDoc(msgRef);
     } catch (error) {
       console.error('Failed to delete message from Firebase', error);
       console.warn('Network issue or permissions error. IndexedDB has the message deleted locally.');
+    }
+  },
+
+  saveSession: async (session: any) => {
+    if (!auth.currentUser || auth.currentUser.isAnonymous) return;
+    try {
+      const sessionRef = doc(db, 'users', auth.currentUser.uid, 'conversations', session.id);
+      await setDoc(sessionRef, {
+        id: session.id,
+        title: session.title || 'New Chat',
+        updatedAt: session.updatedAt || Date.now(),
+        isPinned: session.isPinned || false,
+        isProject: session.isProject || false
+      }, { merge: true });
+    } catch (err) {
+      console.warn("Failed to save session to Firebase:", err);
+    }
+  },
+
+  loadSessions: async () => {
+    if (!auth.currentUser || auth.currentUser.isAnonymous) return [];
+    try {
+      const q = query(
+        collection(db, 'users', auth.currentUser.uid, 'conversations'),
+        orderBy('updatedAt', 'desc')
+      );
+      const querySnapshot = await getDocs(q);
+      const sessions: any[] = [];
+      querySnapshot.forEach((docSnap) => {
+        sessions.push(docSnap.data());
+      });
+      return sessions;
+    } catch (err) {
+      console.error("Failed to load sessions from Firebase:", err);
+      return [];
+    }
+  },
+
+  deleteSession: async (sessionId: string) => {
+    if (!auth.currentUser || auth.currentUser.isAnonymous) return;
+    try {
+      const sessionRef = doc(db, 'users', auth.currentUser.uid, 'conversations', sessionId);
+      await deleteDoc(sessionRef);
+    } catch (err) {
+      console.warn("Failed to delete session from Firebase:", err);
     }
   }
 };

@@ -27,10 +27,10 @@ function Toggle({ checked, onChange, label, desc }: { checked: boolean, onChange
   const haptic = useHaptics();
   
   return (
-    <div className="flex items-center justify-between py-3 border-b border-white/5 last:border-0">
-      <div className="flex flex-col">
+    <div className="flex items-center justify-between py-3 border-b border-white/5 last:border-0 gap-4">
+      <div className="flex flex-col flex-1">
         <span className="text-white text-[15px]">{label}</span>
-        {desc && <span className="text-white/50 text-xs mt-0.5">{desc}</span>}
+        {desc && <span className="text-white/50 text-xs mt-0.5 leading-snug">{desc}</span>}
       </div>
       <button 
         onClick={() => {
@@ -38,7 +38,7 @@ function Toggle({ checked, onChange, label, desc }: { checked: boolean, onChange
           onChange(!checked);
         }}
         className={cn(
-          "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+          "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",
           checked ? "bg-accent-500" : "bg-white/20"
         )}
       >
@@ -55,15 +55,15 @@ function Select({ label, value, options, onChange }: { label: string, value: str
   const haptic = useHaptics();
   
   return (
-    <div className="flex items-center justify-between py-3 border-b border-white/5 last:border-0">
-      <span className="text-white text-[15px]">{label}</span>
+    <div className="flex items-center justify-between py-3 border-b border-white/5 last:border-0 gap-4">
+      <span className="text-white text-[15px] flex-1">{label}</span>
       <select 
         value={value}
         onChange={(e) => {
           haptic(10);
           onChange(e.target.value);
         }}
-        className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white/90 outline-none focus:border-accent-500/50 transition-colors"
+        className="bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white/90 outline-none focus:border-accent-500/50 transition-colors shrink-0 max-w-[150px]"
       >
         {options.map(opt => (
           <option key={opt} value={opt} className="bg-[#1A1A1D]">{opt}</option>
@@ -203,7 +203,8 @@ export function SettingsPage() {
       case 'appearance':
         return (
           <div className="p-5 pt-2 flex flex-col">
-            <Toggle checked={settings.useDarkTheme} onChange={(v) => updateSetting('useDarkTheme', v)} label="Dark Theme" desc="Use darker colors for the interface" />
+            <Toggle checked={settings.autoTheme} onChange={(v) => updateSetting('autoTheme', v)} label="Auto Theme" desc="Automatically switches between light and dark modes based on ambient light sensor data (if available)." />
+            <Toggle checked={settings.useDarkTheme} onChange={(v) => updateSetting('useDarkTheme', v)} label="Dark Theme" desc="Use darker colors for the interface (overridden by Auto Theme)" />
             <Select label="Font Size" value={settings.fontSize} onChange={(v) => updateSetting('fontSize', v)} options={['Small', 'Medium', 'Large']} />
             <Select label="Color Theme" value={settings.accentColor} onChange={(v) => updateSetting('accentColor', v)} options={['Logo', 'Blue', 'Emerald', 'Rose', 'Amber']} />
           </div>
@@ -295,7 +296,7 @@ export function SettingsPage() {
         return (
           <div className="p-5 pt-2 flex flex-col">
             <Toggle checked={settings.voiceEnabled} onChange={handleToggleVoice} label="Voice Input" desc={settings.voiceEnabled ? "Microphone Connected ✓" : "Allow microphone access"} />
-            <Select label="Assistant Voice" value={settings.assistantVoice} onChange={(v) => updateSetting('assistantVoice', v)} options={['Neural Natural', 'Robotic', 'Soft', 'Deep']} />
+            <Select label="Assistant Voice" value={settings.assistantVoice} onChange={(v) => updateSetting('assistantVoice', v)} options={['Luna', 'Nova', 'Aurora', 'Atlas', 'Echo', 'Neural Natural']} />
             <Select label="Speaking Rate" value={settings.speakingRate} onChange={(v) => updateSetting('speakingRate', v)} options={['Slow', 'Normal', 'Fast']} />
           </div>
         );
@@ -436,6 +437,10 @@ export function SettingsPage() {
       initial={{ opacity: 0, scale: 0.98 }}
       animate={{ opacity: 1, scale: 1 }}
       className="flex-1 overflow-y-auto px-4 py-8 w-full mx-auto no-scrollbar"
+      style={{
+        maskImage: 'linear-gradient(to bottom, transparent 0%, black 5%, black 90%, transparent 100%)',
+        WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 5%, black 90%, transparent 100%)'
+      }}
     >
       <h1 className="text-2xl font-bold tracking-tight mb-8 px-1">Settings</h1>
 

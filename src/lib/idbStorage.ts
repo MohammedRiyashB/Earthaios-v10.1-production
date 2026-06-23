@@ -69,6 +69,10 @@ export const idbChats = {
   async deleteMessage(id: string) {
     const db = await initDB();
     return db.delete('chats', id);
+  },
+  async clearAll() {
+    const db = await initDB();
+    return db.clear('chats');
   }
 };
 
@@ -93,5 +97,9 @@ export const idbConversations = {
       await deleteTx.objectStore('chats').delete(key);
     }
     await deleteTx.done;
+  },
+  async clearAll() {
+    const db = await initDB();
+    return db.clear('conversations');
   }
 };

@@ -1,32 +1,21 @@
 import React, { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { motion } from 'framer-motion';
 import { Copy, Edit3, RotateCcw, PlayCircle, ThumbsUp, ThumbsDown, MessageCircle, Check, Trash2 } from 'lucide-react';
 import { Message } from '../../types';
 import { cn } from '../../lib/utils';
 import { useApp } from '../../context/AppContext';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
 
 import { RippleButton } from '../ui/RippleButton';
 
 import { useHaptics } from '../../hooks/useHaptics';
 
-function getSuggestedReplies(content: string) {
-  const text = content.toLowerCase();
-  if (text.includes('error') || text.includes('issue') || text.includes('fail')) {
-    return ["How do I fix this?", "Explain the root cause", "Wait, why did this happen?"];
-  }
-  if (content.includes('```')) {
-    return ["Can you explain how this works?", "Is there a more optimized way?", "Can you add comments to the code?"];
-  }
-  if (text.includes('features') || text.includes('example')) {
-    return ["Can we build that?", "Show me another example", "Let's try it out"];
-  }
-  return ["Can you tell me more?", "Explain that in simpler terms", "Provide an example"];
-}
-
 export function MessageBubble({ message, isLatest }: { message: Message, isLatest?: boolean }) {
-  const { settings } = useApp();
+  const { settings, isIncognito } = useApp();
   const haptic = useHaptics();
   const isUser = message.role === 'user';
   const [isCopied, setIsCopied] = React.useState(false);
@@ -35,12 +24,6 @@ export function MessageBubble({ message, isLatest }: { message: Message, isLates
   const [showThumbsUpAnim, setShowThumbsUpAnim] = React.useState(false);
   const [showFeedbackModal, setShowFeedbackModal] = React.useState(false);
   const [feedbackText, setFeedbackText] = React.useState('');
-  
-  const suggestions = useMemo(() => {
-    return !isUser && isLatest && !message.isStreaming && !message.isError && message.content 
-      ? getSuggestedReplies(message.content) 
-      : [];
-  }, [isUser, isLatest, message]);
   
   const handlePlayTTS = () => {
     if (!settings.soundEffects) {
@@ -101,14 +84,97 @@ export function MessageBubble({ message, isLatest }: { message: Message, isLates
         <div className={cn(
           "px-5 py-4 text-[16px] leading-relaxed",
           isUser 
-            ? "bg-[#181818]/90 backdrop-blur-xl rounded-[28px] rounded-tr-[8px] text-white/95 border border-white/5 shadow-lg" 
-            : "bg-transparent text-white/90"
+            ? "bg-[#F2F4F8] text-[#111827] dark:bg-[#181818]/90 dark:backdrop-blur-xl rounded-[28px] rounded-tr-[8px] dark:text-white/95 border border-black/5 dark:border-white/5 shadow-md dark:shadow-lg" 
+            : "bg-transparent text-[#111827] dark:text-white/90"
         )}>
           {isUser ? (
             <p className="whitespace-pre-wrap">{message.content}</p>
           ) : (
-            <div className={cn("prose prose-invert max-w-none prose-p:leading-relaxed prose-pre:bg-[#1A1A1D] prose-pre:border prose-pre:border-white/10 prose-pre:rounded-2xl", message.isStreaming && message.content !== '' && "drop-shadow-[0_0_8px_rgba(0,184,217,0.5)]")}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+            <div className={cn("prose dark:prose-invert max-w-none prose-p:leading-relaxed prose-pre:p-0 prose-pre:bg-transparent prose-pre:border-0", message.isStreaming && message.content !== '' && "drop-shadow-[0_0_8px_rgba(0,184,217,0.5)]")}>
+              <ReactMarkdown 
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  code({ node, inline, className, children, ...props }: any) {
+                    const match = /language-(\w+)/.exec(className || '');
+                    
+                    if (!inline && match && match[1] === 'chart' && !message.isStreaming) {
+                      try {
+                        const chartData = JSON.parse(String(children).replace(/\n$/, ''));
+                        const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8'];
+                        
+                        return (
+                          <div className="w-full h-[300px] mt-4 mb-4 bg-white dark:bg-[#1A1A1D] p-4 rounded-xl border border-black/5 dark:border-white/5">
+                            <ResponsiveContainer width="100%" height="100%">
+                              {chartData.type === 'bar' ? (
+                                <BarChart data={chartData.data}>
+                                  <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
+                                  <XAxis dataKey={Object.keys(chartData.data[0] || {})[0]} stroke="#888" fontSize={12} />
+                                  <YAxis stroke="#888" fontSize={12} />
+                                  <Tooltip contentStyle={{ backgroundColor: '#333', border: 'none', borderRadius: '8px' }} />
+                                  <Bar dataKey={Object.keys(chartData.data[0] || {})[1] || 'value'} fill="#00B8D9" radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                              ) : chartData.type === 'line' ? (
+                                <LineChart data={chartData.data}>
+                                  <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
+                                  <XAxis dataKey={Object.keys(chartData.data[0] || {})[0]} stroke="#888" fontSize={12} />
+                                  <YAxis stroke="#888" fontSize={12} />
+                                  <Tooltip contentStyle={{ backgroundColor: '#333', border: 'none', borderRadius: '8px' }} />
+                                  <Line type="monotone" dataKey={Object.keys(chartData.data[0] || {})[1] || 'value'} stroke="#00B8D9" strokeWidth={2} />
+                                </LineChart>
+                              ) : chartData.type === 'pie' ? (
+                                <PieChart>
+                                  <Tooltip contentStyle={{ backgroundColor: '#333', border: 'none', borderRadius: '8px' }} />
+                                  <Pie data={chartData.data} dataKey={Object.keys(chartData.data[0] || {})[1] || 'value'} nameKey={Object.keys(chartData.data[0] || {})[0] || 'name'} outerRadius={100} fill="#8884d8">
+                                    {chartData.data.map((entry: any, index: number) => (
+                                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                  </Pie>
+                                </PieChart>
+                              ) : (
+                                <div className="flex items-center justify-center h-full text-red-500">Unsupported chart type</div>
+                              )}
+                            </ResponsiveContainer>
+                          </div>
+                        );
+                      } catch (e) {
+                         // Fallback to json if error
+                      }
+                    }
+
+                    return !inline && match ? (
+                      <div className="relative group max-w-full overflow-hidden rounded-xl border border-white/10 mt-4 mb-4 bg-[#1E1E1E]">
+                        <div className="flex items-center justify-between px-4 py-2 bg-black/40 border-b border-white/5">
+                          <span className="text-xs font-medium text-white/50 uppercase tracking-widest">{match[1]}</span>
+                          <button 
+                            onClick={() => navigator.clipboard.writeText(String(children).replace(/\n$/, ''))}
+                            className="text-white/40 hover:text-white transition-colors"
+                            title="Copy code"
+                          >
+                            <Copy size={14} />
+                          </button>
+                        </div>
+                        <SyntaxHighlighter
+                          {...props}
+                          children={String(children).replace(/\n$/, '')}
+                          style={vscDarkPlus}
+                          language={match[1]}
+                          PreTag="div"
+                          customStyle={{
+                            margin: 0,
+                            background: 'transparent',
+                            padding: '1rem',
+                            fontSize: '0.85rem'
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <code {...props} className={cn("bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-md font-mono text-[0.85em]", className)}>
+                        {children}
+                      </code>
+                    )
+                  }
+                }}
+              >
                  {message.content}
               </ReactMarkdown>
               {message.isStreaming && message.content === '' && (
@@ -192,7 +258,7 @@ export function MessageBubble({ message, isLatest }: { message: Message, isLates
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm sm:relative sm:inset-auto sm:z-50 sm:p-0 sm:bg-transparent sm:backdrop-blur-none">
                   <div className="w-full max-w-[300px] p-5 bg-[#1A1A1D] border border-white/10 rounded-2xl shadow-2xl sm:absolute sm:top-10 sm:left-0 sm:w-72 sm:p-3 sm:rounded-xl ml-0">
                     <h4 className="text-base sm:text-sm font-semibold mb-2">Help improve the AI</h4>
-                    <p className="text-sm sm:text-xs text-white/60 mb-4 sm:mb-3">Provide feedback to get a better response.</p>
+                    <p className="text-sm sm:text-xs text-gray-500 dark:text-white/60 mb-4 sm:mb-3">Provide feedback to get a better response.</p>
                     <textarea
                       value={feedbackText}
                       onChange={(e) => setFeedbackText(e.target.value)}
@@ -233,7 +299,7 @@ export function MessageBubble({ message, isLatest }: { message: Message, isLates
            <motion.div 
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 
-            className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity mr-2"
+            className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity mr-2 mt-3"
           >
             <ActionButton 
               icon={Edit3} 
@@ -253,27 +319,6 @@ export function MessageBubble({ message, isLatest }: { message: Message, isLates
           </motion.div>
         )}
       </div>
-
-      {/* Suggested Replies */}
-      {suggestions.length > 0 && (
-        <motion.div 
-          initial={{ opacity: 0, y: 5 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="flex flex-wrap gap-2 mt-4 ml-2"
-        >
-          {suggestions.map((suggestion, idx) => (
-            <RippleButton
-              key={idx}
-              onClick={() => window.dispatchEvent(new CustomEvent('earth:send', { detail: { text: suggestion } }))}
-              className="px-3 py-1.5 text-[13px] bg-white/[0.05] border border-white/10 rounded-[20px] text-white/80 hover:text-white hover:bg-white/[0.1] hover:border-white/20 transition-ultra flex items-center gap-1.5 shadow-sm hover:shadow-[0_0_15px_rgba(255,255,255,0.05)] hover:scale-[1.02] active:scale-[0.98] hardware-accelerated"
-            >
-              <MessageCircle size={12} className="text-accent-400" />
-              {suggestion}
-            </RippleButton>
-          ))}
-        </motion.div>
-      )}
     </motion.div>
   );
 }
@@ -283,29 +328,80 @@ function ActionButton({ icon: Icon, title, onClick, className }: { icon: any, ti
     <button 
       title={title}
       onClick={onClick}
-      className={cn("p-1.5 text-white/40 hover:text-white rounded-lg hover:bg-white/10 transition-ultra hover:scale-110 active:scale-95 hardware-accelerated shrink-0", className)}
+      className={cn("p-1.5 text-gray-400 dark:text-white/40 hover:text-gray-900 dark:hover:text-white rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition-ultra hover:scale-110 active:scale-95 hardware-accelerated shrink-0", className)}
     >
       <Icon size={16} />
     </button>
   );
 }
 
-export function MessageList() {
-  const { messages } = useApp();
-  const bottomRef = React.useRef<HTMLDivElement>(null);
+import { getGreeting } from '../../lib/greetings';
+
+export function EmptyGreeting() {
+  const { user, isTyping } = useApp();
+  const [greeting, setGreeting] = React.useState('');
 
   React.useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    setGreeting(getGreeting());
+  }, []);
 
-  if (messages.length === 0) return null;
+  if (isTyping) return null;
 
   return (
-    <div className="flex-1 w-full max-w-4xl mx-auto px-4 md:px-6 pt-20 pb-4 flex flex-col">
+    <motion.div 
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.2 }}
+      className="text-center pointer-events-auto w-full px-4"
+    >
+      <div 
+        className="text-gray-800 dark:text-gray-100 text-3xl sm:text-4xl font-medium tracking-tight mb-2"
+        style={{ fontFamily: "'Space Grotesk', sans-serif" }}
+      >
+        {greeting}
+      </div>
+      {user?.displayName ? (
+         <div className="text-gray-500 dark:text-gray-400 text-lg font-medium" style={{ fontFamily: "'Inter', sans-serif" }}>
+           {user.displayName}
+         </div>
+      ) : null}
+    </motion.div>
+  );
+}
+
+export function MessageList() {
+  const { messages, isIncognito, isTyping } = useApp();
+
+  if (messages.length === 0) {
+    if (isIncognito) {
+      if (isTyping) return null;
+      
+      return (
+        <div className="flex-1 w-full h-full flex flex-col items-center justify-center p-8 z-10 relative">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, filter: 'blur(10px)' }}
+            animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+            className="w-full max-w-sm mx-auto text-center flex flex-col items-center"
+          >
+            <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="opacity-80 mb-6 text-gray-500">
+              <path d="M12 10V2L6.5 10H12ZM12 10V2L17.5 10H12ZM2 10H22M6 14C4.89543 14 4 14.8954 4 16C4 17.1046 4.89543 18 6 18C7.10457 18 8 17.1046 8 16C8 14.8954 7.10457 14 6 14ZM18 14C16.8954 14 16 14.8954 16 16C16 17.1046 16.8954 18 18 18C19.1046 18 20 17.1046 20 16C20 14.8954 19.1046 14 18 14ZM8 16H16" />
+            </svg>
+            <p className="text-gray-400 dark:text-white/60 leading-relaxed font-medium text-[14px]" style={{ fontFamily: 'var(--font-mono)' }}>
+              This chat won't appear in your chat history, and won't be used to train our models. For safety, we may keep a copy of this chat for up to 30 days.
+            </p>
+          </motion.div>
+        </div>
+      );
+    }
+    return null;
+  }
+
+  return (
+    <div className="flex-1 w-full max-w-4xl mx-auto px-4 md:px-6 pt-20 pb-4 flex flex-col h-full">
       {messages.map((msg, index) => (
         <MessageBubble key={msg.id} message={msg} isLatest={index === messages.length - 1} />
       ))}
-      <div ref={bottomRef} className="h-[160px] pb-[env(safe-area-inset-bottom)] shrink-0 w-full" />
+      <div className="h-[160px] pb-[env(safe-area-inset-bottom)] shrink-0 w-full" />
     </div>
   );
 }

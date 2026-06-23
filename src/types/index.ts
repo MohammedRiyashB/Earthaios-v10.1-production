@@ -17,4 +17,16 @@ export interface Message {
   timestamp: Date;
   isStreaming?: boolean;
   isError?: boolean;
+  attachments?: string[];
+}
+
+export interface MemoryItem {
+  id: string;
+  type: 'short-term' | 'long-term';
+  category: 'user-profile' | 'agent-space' | 'general' | 'timeline';
+  content: string;
+  importance: number; // 1-10
+  timestamp: Date;
+  isPinned: boolean;
+  tags: string[];
 }

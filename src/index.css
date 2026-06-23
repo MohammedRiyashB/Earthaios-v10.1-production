@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&family=Caveat:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @layer base {
@@ -151,7 +151,7 @@ html:not(.dark) .border-white\/10 {
 html:not(.dark) .text-white {
   @apply text-gray-900;
 }
-html:not(.dark) .text-white\/80, html:not(.dark) .text-white\/90 {
+html:not(.dark) .text-white\/70, html:not(.dark) .text-white\/80, html:not(.dark) .text-white\/90 {
   @apply text-gray-700;
 }
 html:not(.dark) .text-white\/50, html:not(.dark) .text-white\/60, html:not(.dark) .text-white\/40 {

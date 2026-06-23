@@ -18,6 +18,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { id: 'library', label: 'Library', icon: Library },
   { id: 'projects', label: 'Projects', icon: FolderOpen },
+  { id: 'memory', label: 'Memory', icon: BrainCircuit },
   { id: 'scheduled', label: 'Scheduled', icon: Clock },
   { id: 'apps', label: 'Apps', icon: Grid },
   { id: 'more', label: 'More', icon: MoreHorizontal },
@@ -143,17 +144,17 @@ export function Sidebar() {
         transition={{ type: 'spring', damping: 30, stiffness: 350, mass: 0.8 }}
         className={cn(
           "fixed top-0 left-0 h-[100dvh] w-[85%] max-w-[320px] z-50 flex flex-col hardware-accelerated",
-          "bg-black border-r border-white/5"
+          "bg-white dark:bg-black border-r border-black/5 dark:border-white/5"
         )}
       >
         <div className="p-4 pt-[max(env(safe-area-inset-top),24px)] flex justify-between items-center w-full shrink-0">
           <div className="flex items-center gap-3 pl-2">
-             <span className="text-xl font-bold tracking-tight text-white">EARTH OS</span>
+             <span className="text-xl font-bold tracking-tight text-gray-900 dark:text-white">EARTH OS</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="flex items-center rounded-full bg-white/[0.08] border border-white/5 p-1 backdrop-blur-md">
+            <div className="flex items-center rounded-full bg-black/[0.04] dark:bg-white/[0.08] border border-black/5 dark:border-white/5 p-1 backdrop-blur-md">
               <button 
-                className="p-1.5 rounded-full hover:bg-white/10 text-white/80 hover:text-white transition-colors"
+                className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-gray-600 dark:text-white/80 hover:text-black dark:hover:text-white transition-colors"
                 onClick={() => { setActiveView('search'); toggleSidebar(); }}
               >
                 <Search size={18} />
@@ -167,24 +168,30 @@ export function Sidebar() {
             </div>
             <button
               onClick={handleNewChat}
-              className="p-2 rounded-full bg-white/[0.08] border border-white/5 hover:bg-white/10 text-white transition-colors"
+              className="p-2 rounded-full bg-black/[0.04] dark:bg-white/[0.08] border border-black/5 dark:border-white/5 hover:bg-black/5 dark:hover:bg-white/10 text-gray-900 dark:text-white transition-colors"
             >
               <Edit2 size={18} strokeWidth={2} />
             </button>
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto no-scrollbar px-3 py-2 space-y-6 pb-24">
+        <div 
+          className="flex-1 overflow-y-auto no-scrollbar px-3 py-2 space-y-6 pb-24"
+          style={{
+            maskImage: 'linear-gradient(to bottom, transparent 0%, black 5%, black 90%, transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 5%, black 90%, transparent 100%)'
+          }}
+        >
           
           <div className="space-y-1">
             {navItems.map((item) => {
               return (
                 <button
                   key={item.id}
-                  className="w-full flex items-center gap-4 px-3 py-2.5 rounded-xl transition-colors text-white/80 hover:bg-white/[0.06] hover:text-white active:bg-white/[0.1]"
-                  onClick={() => { toggleSidebar(); }}
+                  className="w-full flex items-center gap-4 px-3 py-2.5 rounded-xl transition-colors text-gray-700 dark:text-white/80 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] hover:text-gray-900 dark:hover:text-white active:bg-black/[0.08] dark:active:bg-white/[0.1]"
+                  onClick={() => { setActiveView(item.id as ViewState); toggleSidebar(); }}
                 >
-                  <item.icon size={20} className="text-white/70" strokeWidth={1.5} />
+                  <item.icon size={20} className="text-gray-500 dark:text-white/70" strokeWidth={1.5} />
                   <span className="font-medium text-[15px]">{item.label}</span>
                 </button>
               )
@@ -192,7 +199,7 @@ export function Sidebar() {
           </div>
 
           <div className="px-2">
-            <h3 className="text-xs font-semibold text-white/50 mb-2 px-1">Pinned</h3>
+            <h3 className="text-xs font-semibold text-gray-500 dark:text-white/50 mb-2 px-1">Pinned</h3>
             <div className="space-y-0.5">
               {pinnedItems.map(item => (
                 <div 
@@ -204,9 +211,9 @@ export function Sidebar() {
                     onPointerMove={handlePointerMove}
                     onPointerUp={(e) => handlePointerUp(e, item.id)}
                     onPointerLeave={() => { if(pressTimer.current) clearTimeout(pressTimer.current); }}
-                    className="w-full flex items-center gap-3 px-2 py-2.5 rounded-lg transition-colors text-white/90 hover:bg-white/[0.06] active:bg-white/[0.1]"
+                    className="w-full flex items-center gap-3 px-2 py-2.5 rounded-lg transition-colors text-gray-800 dark:text-white/90 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] active:bg-black/[0.08] dark:active:bg-white/[0.1]"
                   >
-                    <Pin size={16} className="text-white/50 shrink-0" strokeWidth={2} />
+                    <Pin size={16} className="text-gray-400 dark:text-white/50 shrink-0" strokeWidth={2} />
                     {editingId === item.id ? (
                       <input 
                         type="text" 
@@ -218,7 +225,7 @@ export function Sidebar() {
                           if (e.key === 'Enter') handleRenameSubmit(item.id);
                           if (e.key === 'Escape') setEditingId(null);
                         }}
-                        className="bg-white/10 text-white rounded px-2 py-0.5 w-full outline-none focus:ring-1 focus:ring-white/30"
+                        className="bg-black/5 dark:bg-white/10 text-gray-900 dark:text-white rounded px-2 py-0.5 w-full outline-none focus:ring-1 focus:ring-black/20 dark:focus:ring-white/30"
                         onClick={(e) => e.stopPropagation()}
                       />
                     ) : (
@@ -231,7 +238,7 @@ export function Sidebar() {
           </div>
 
           <div className="px-2">
-            <h3 className="text-xs font-semibold text-white/50 mb-2 px-1">Recents</h3>
+            <h3 className="text-xs font-semibold text-gray-500 dark:text-white/50 mb-2 px-1">Recents</h3>
             <div className="space-y-0.5">
               {recentItems.map(item => (
                 <div 
@@ -243,7 +250,7 @@ export function Sidebar() {
                     onPointerMove={handlePointerMove}
                     onPointerUp={(e) => handlePointerUp(e, item.id)}
                     onPointerLeave={() => { if(pressTimer.current) clearTimeout(pressTimer.current); }}
-                    className="w-full flex items-center gap-3 px-2 py-3 rounded-lg transition-colors text-white/90 hover:bg-white/[0.06] active:bg-white/[0.1]"
+                    className="w-full flex items-center gap-3 px-2 py-3 rounded-lg transition-colors text-gray-800 dark:text-white/90 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] active:bg-black/[0.08] dark:active:bg-white/[0.1]"
                   >
                     {editingId === item.id ? (
                       <input 
@@ -256,7 +263,7 @@ export function Sidebar() {
                           if (e.key === 'Enter') handleRenameSubmit(item.id);
                           if (e.key === 'Escape') setEditingId(null);
                         }}
-                        className="bg-white/10 text-white rounded px-2 py-0.5 w-full outline-none focus:ring-1 focus:ring-white/30"
+                        className="bg-black/5 dark:bg-white/10 text-gray-900 dark:text-white rounded px-2 py-0.5 w-full outline-none focus:ring-1 focus:ring-black/20 dark:focus:ring-white/30"
                         onClick={(e) => e.stopPropagation()}
                       />
                     ) : (
@@ -285,14 +292,14 @@ export function Sidebar() {
               top: contextMenu.y,
               zIndex: 9999
             }}
-            className="w-56 bg-black/90 border border-white/10 rounded-3xl shadow-2xl py-2 flex flex-col backdrop-blur-xl"
+            className="w-56 bg-white/90 dark:bg-black/90 border border-black/10 dark:border-white/10 rounded-3xl shadow-2xl py-2 flex flex-col backdrop-blur-xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <button className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 text-white/90 w-full text-left transition-colors" onClick={togglePin}>
-              <Pin size={18} className="text-white/70" />
+            <button className="flex items-center gap-3 px-4 py-3 hover:bg-black/5 dark:hover:bg-white/5 text-gray-800 dark:text-white/90 w-full text-left transition-colors" onClick={togglePin}>
+              <Pin size={18} className="text-gray-500 dark:text-white/70" />
               <span className="text-[15px]">{contextMenu.isPinned ? "Unpin" : "Pin"}</span>
             </button>
-            <button className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 text-white/90 w-full text-left transition-colors" onClick={() => {
+            <button className="flex items-center gap-3 px-4 py-3 hover:bg-black/5 dark:hover:bg-white/5 text-gray-800 dark:text-white/90 w-full text-left transition-colors" onClick={() => {
               const session = sessions.find(s => s.id === contextMenu.id);
               if (session) {
                 setEditingId(contextMenu.id);
@@ -300,15 +307,17 @@ export function Sidebar() {
               }
               setContextMenu(null);
             }}>
-              <Edit2 size={18} className="text-white/70" />
+              <Edit2 size={18} className="text-gray-500 dark:text-white/70" />
               <span className="text-[15px]">Rename</span>
             </button>
-            <button className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 text-white/90 w-full text-left transition-colors" onClick={() => {
+            <button className="flex items-center gap-3 px-4 py-3 hover:bg-black/5 dark:hover:bg-white/5 text-gray-800 dark:text-white/90 w-full text-left transition-colors" onClick={() => {
               // Add to project
               updateSession(contextMenu.id, { isProject: true });
+              setActiveView('projects');
+              toggleSidebar();
               setContextMenu(null);
             }}>
-              <FolderPlus size={18} className="text-white/70" />
+              <FolderPlus size={18} className="text-gray-500 dark:text-white/70" />
               <span className="text-[15px]">Add to project <span className="float-right">{'>'}</span></span>
             </button>
             <button className="flex items-center gap-3 px-4 py-3 hover:bg-red-500/10 text-red-400 w-full text-left transition-colors mt-1" onClick={deleteChat}>
